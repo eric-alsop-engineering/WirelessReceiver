@@ -33,7 +33,7 @@
 #include <Adafruit_MCP23X17.h>
 #include <PushButton.h>
 #include <IMotorController.h>
-#include <TugAccessories.h>
+#include <BitMasker.h>
 
 #define IDLE_TIMER_DURATION            1800000  // 30 minutes — STANDBY before deep sleep
 #define LOST_TIMER_DURATION            120000   // 2 minutes — LOST before deep sleep
@@ -91,12 +91,12 @@ public:
     // ── Tug → Controller data ──
     int16_t torque;
     int16_t tugBatLvl;
-    TugAccessories accsStatus;
+    uint16_t accsStatus;
 
     // ── Controller → Tug data ──
     int16_t throttle;
     int16_t steering;
-    TugAccessories accsCmnds;
+    uint16_t accsCmnds;
     sysState_e ctrlrState;
 
     // ── Local state ──

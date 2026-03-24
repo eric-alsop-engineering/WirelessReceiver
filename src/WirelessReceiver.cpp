@@ -46,8 +46,8 @@ WirelessReceiver::WirelessReceiver(
     steering = STRAIGHT;
     torque = 0xACED;       // TODO: not actually measured yet
     tugBatLvl = 0xBAFF;   // TODO: not actually measured yet
-    accsCmnds = TugAccessories();
-    accsStatus = TugAccessories();
+    accsCmnds = 0;
+    accsStatus = 0;
     sysState = BOOT;
     ctrlrState = BOOT;
     motorErrorCode = 0;
@@ -81,7 +81,7 @@ void WirelessReceiver::setup()
         ERRORPRINTLN("Input io expander init: FAIL\n");
     }
 
-    accsCmnds.setAll(0);
+    accsCmnds = 0;
     eStopButton.init();
     pinMode(cfg.boardPwrOffPin, OUTPUT);
     digitalWrite(cfg.boardPwrOffPin, LOW);
@@ -146,7 +146,6 @@ void WirelessReceiver::update()
         {
             pwrOffTimer.stop();
         }
-        accsCmnds.unlock();
         break;
 
     case COMM_ERR:
@@ -266,22 +265,22 @@ void WirelessReceiver::readHardware()
 {
     D2PRINTLN("Entering readHardware");
 
-    accsStatus.set(TUG_SYSTEM_PWR, inputExpander.digitalRead(cfg.systemPwrPin));
-    accsStatus.set(HEADLIGHTS, inputExpander.digitalRead(cfg.headlightsPin));
-    accsStatus.set(AIR_COMPRESSOR, inputExpander.digitalRead(cfg.airCompressorPin));
-    accsStatus.set(ROTATE_UNLOCK, inputExpander.digitalRead(cfg.rotateRelayPin));
-    accsStatus.set(EZ_LOAD_UNLOCK, inputExpander.digitalRead(cfg.ezLoadRelayPin));
-    accsStatus.set(UNDER_GLOW, inputExpander.digitalRead(cfg.underGlowPin));
-    accsStatus.set(FORWARD_LIGHT, inputExpander.digitalRead(cfg.dirIndFwdLedPin));
-    accsStatus.set(BACKWARD_LIGHT, inputExpander.digitalRead(cfg.dirIndRvrsLedPin));
-    accsStatus.set(LEFT_TURN_LIGHT, inputExpander.digitalRead(cfg.dirIndLeftLedPin));
-    accsStatus.set(RIGHT_TURN_LIGHT, inputExpander.digitalRead(cfg.dirIndRightLedPin));
-    accsStatus.set(WINCH_OUT, inputExpander.digitalRead(cfg.winchOutPin));
-    accsStatus.set(WINCH_IN, inputExpander.digitalRead(cfg.winchInPin));
-    accsStatus.set(L_WING_UP, inputExpander.digitalRead(cfg.lWingUpPin));
-    accsStatus.set(L_WING_DOWN, inputExpander.digitalRead(cfg.lWingDownPin));
-    accsStatus.set(R_WING_UP, inputExpander.digitalRead(cfg.rWingUpPin));
-    accsStatus.set(R_WING_DOWN, inputExpander.digitalRead(cfg.rWingDownPin));
+    BitMasker::setBit(accsStatus, TUG_SYSTEM_PWR, inputExpander.digitalRead(cfg.systemPwrPin));
+    BitMasker::setBit(accsStatus, HEADLIGHTS, inputExpander.digitalRead(cfg.headlightsPin));
+    BitMasker::setBit(accsStatus, AIR_COMPRESSOR, inputExpander.digitalRead(cfg.airCompressorPin));
+    BitMasker::setBit(accsStatus, ROTATE_UNLOCK, inputExpander.digitalRead(cfg.rotateRelayPin));
+    BitMasker::setBit(accsStatus, EZ_LOAD_UNLOCK, inputExpander.digitalRead(cfg.ezLoadRelayPin));
+    BitMasker::setBit(accsStatus, UNDER_GLOW, inputExpander.digitalRead(cfg.underGlowPin));
+    BitMasker::setBit(accsStatus, FORWARD_LIGHT, inputExpander.digitalRead(cfg.dirIndFwdLedPin));
+    BitMasker::setBit(accsStatus, BACKWARD_LIGHT, inputExpander.digitalRead(cfg.dirIndRvrsLedPin));
+    BitMasker::setBit(accsStatus, LEFT_TURN_LIGHT, inputExpander.digitalRead(cfg.dirIndLeftLedPin));
+    BitMasker::setBit(accsStatus, RIGHT_TURN_LIGHT, inputExpander.digitalRead(cfg.dirIndRightLedPin));
+    BitMasker::setBit(accsStatus, WINCH_OUT, inputExpander.digitalRead(cfg.winchOutPin));
+    BitMasker::setBit(accsStatus, WINCH_IN, inputExpander.digitalRead(cfg.winchInPin));
+    BitMasker::setBit(accsStatus, L_WING_UP, inputExpander.digitalRead(cfg.lWingUpPin));
+    BitMasker::setBit(accsStatus, L_WING_DOWN, inputExpander.digitalRead(cfg.lWingDownPin));
+    BitMasker::setBit(accsStatus, R_WING_UP, inputExpander.digitalRead(cfg.rWingUpPin));
+    BitMasker::setBit(accsStatus, R_WING_DOWN, inputExpander.digitalRead(cfg.rWingDownPin));
 
     D2PRINTLN("Leaving readHardware");
 }
@@ -305,9 +304,9 @@ void WirelessReceiver::extractReceivedData()
     throttle = comm.receivedPacket.getItem1();
     steering = comm.receivedPacket.getItem2();
     ctrlrState = comm.receivedPacket.getSysState();
-    bool tugSysPwrIsOn = accsCmnds.getIsActive(TUG_SYSTEM_PWR);
-    accsCmnds.setAll(comm.receivedPacket.accsData.getAll());
-    accsCmnds.set(TUG_SYSTEM_PWR, tugSysPwrIsOn);
+    bool tugSysPwrIsOn = BitMasker::getIsActive(accsCmnds, TUG_SYSTEM_PWR);
+    accsCmnds = comm.receivedPacket.getAccsData();
+    BitMasker::setBit(accsCmnds, TUG_SYSTEM_PWR, tugSysPwrIsOn);
 
     // TODO: Extract drive mode change request from controller packet if applicable
     // if (driveModes && driveModeChangeRequested) {
@@ -339,34 +338,34 @@ void WirelessReceiver::setDirectionalIndicators()
 {
     if (steering > 0)
     {
-        accsCmnds.set(RIGHT_TURN_LIGHT, HIGH);
-        accsCmnds.set(LEFT_TURN_LIGHT, LOW);
+        BitMasker::setBit(accsCmnds, RIGHT_TURN_LIGHT, HIGH);
+        BitMasker::setBit(accsCmnds, LEFT_TURN_LIGHT, LOW);
     }
     else if (steering < 0)
     {
-        accsCmnds.set(LEFT_TURN_LIGHT, HIGH);
-        accsCmnds.set(RIGHT_TURN_LIGHT, LOW);
+        BitMasker::setBit(accsCmnds, LEFT_TURN_LIGHT, HIGH);
+        BitMasker::setBit(accsCmnds, RIGHT_TURN_LIGHT, LOW);
     }
     else if (0 == steering || motor->isSafetyStopped())
     {
-        accsCmnds.set(LEFT_TURN_LIGHT, LOW);
-        accsCmnds.set(RIGHT_TURN_LIGHT, LOW);
+        BitMasker::setBit(accsCmnds, LEFT_TURN_LIGHT, LOW);
+        BitMasker::setBit(accsCmnds, RIGHT_TURN_LIGHT, LOW);
     }
 
     if (throttle > 0)
     {
-        accsCmnds.set(FORWARD_LIGHT, HIGH);
-        accsCmnds.set(BACKWARD_LIGHT, LOW);
+        BitMasker::setBit(accsCmnds, FORWARD_LIGHT, HIGH);
+        BitMasker::setBit(accsCmnds, BACKWARD_LIGHT, LOW);
     }
     else if (throttle < 0)
     {
-        accsCmnds.set(BACKWARD_LIGHT, HIGH);
-        accsCmnds.set(FORWARD_LIGHT, LOW);
+        BitMasker::setBit(accsCmnds, BACKWARD_LIGHT, HIGH);
+        BitMasker::setBit(accsCmnds, FORWARD_LIGHT, LOW);
     }
     else if (0 == throttle || motor->isSafetyStopped())
     {
-        accsCmnds.set(BACKWARD_LIGHT, LOW);
-        accsCmnds.set(FORWARD_LIGHT, LOW);
+        BitMasker::setBit(accsCmnds, BACKWARD_LIGHT, LOW);
+        BitMasker::setBit(accsCmnds, FORWARD_LIGHT, LOW);
     }
 }
 
@@ -374,22 +373,22 @@ void WirelessReceiver::writeHardware()
 {
     D2PRINTLN("Entering writeHardware");
 
-    outputExpander.digitalWrite(cfg.systemPwrPin, accsCmnds.getIsActive(TUG_SYSTEM_PWR));
-    outputExpander.digitalWrite(cfg.headlightsPin, accsCmnds.getIsActive(HEADLIGHTS));
-    outputExpander.digitalWrite(cfg.airCompressorPin, accsCmnds.getIsActive(AIR_COMPRESSOR));
-    outputExpander.digitalWrite(cfg.rotateRelayPin, accsCmnds.getIsActive(ROTATE_UNLOCK));
-    outputExpander.digitalWrite(cfg.ezLoadRelayPin, accsCmnds.getIsActive(EZ_LOAD_UNLOCK));
-    outputExpander.digitalWrite(cfg.underGlowPin, accsCmnds.getIsActive(UNDER_GLOW));
-    outputExpander.digitalWrite(cfg.dirIndFwdLedPin, accsCmnds.getIsActive(FORWARD_LIGHT));
-    outputExpander.digitalWrite(cfg.dirIndRvrsLedPin, accsCmnds.getIsActive(BACKWARD_LIGHT));
-    outputExpander.digitalWrite(cfg.dirIndLeftLedPin, accsCmnds.getIsActive(LEFT_TURN_LIGHT));
-    outputExpander.digitalWrite(cfg.dirIndRightLedPin, accsCmnds.getIsActive(RIGHT_TURN_LIGHT));
-    outputExpander.digitalWrite(cfg.winchOutPin, accsCmnds.getIsActive(WINCH_OUT));
-    outputExpander.digitalWrite(cfg.winchInPin, accsCmnds.getIsActive(WINCH_IN));
-    outputExpander.digitalWrite(cfg.lWingUpPin, accsCmnds.getIsActive(L_WING_UP));
-    outputExpander.digitalWrite(cfg.lWingDownPin, accsCmnds.getIsActive(L_WING_DOWN));
-    outputExpander.digitalWrite(cfg.rWingUpPin, accsCmnds.getIsActive(R_WING_UP));
-    outputExpander.digitalWrite(cfg.rWingDownPin, accsCmnds.getIsActive(R_WING_DOWN));
+    outputExpander.digitalWrite(cfg.systemPwrPin, BitMasker::getIsActive(accsCmnds, TUG_SYSTEM_PWR));
+    outputExpander.digitalWrite(cfg.headlightsPin, BitMasker::getIsActive(accsCmnds, HEADLIGHTS));
+    outputExpander.digitalWrite(cfg.airCompressorPin, BitMasker::getIsActive(accsCmnds, AIR_COMPRESSOR));
+    outputExpander.digitalWrite(cfg.rotateRelayPin, BitMasker::getIsActive(accsCmnds, ROTATE_UNLOCK));
+    outputExpander.digitalWrite(cfg.ezLoadRelayPin, BitMasker::getIsActive(accsCmnds, EZ_LOAD_UNLOCK));
+    outputExpander.digitalWrite(cfg.underGlowPin, BitMasker::getIsActive(accsCmnds, UNDER_GLOW));
+    outputExpander.digitalWrite(cfg.dirIndFwdLedPin, BitMasker::getIsActive(accsCmnds, FORWARD_LIGHT));
+    outputExpander.digitalWrite(cfg.dirIndRvrsLedPin, BitMasker::getIsActive(accsCmnds, BACKWARD_LIGHT));
+    outputExpander.digitalWrite(cfg.dirIndLeftLedPin, BitMasker::getIsActive(accsCmnds, LEFT_TURN_LIGHT));
+    outputExpander.digitalWrite(cfg.dirIndRightLedPin, BitMasker::getIsActive(accsCmnds, RIGHT_TURN_LIGHT));
+    outputExpander.digitalWrite(cfg.winchOutPin, BitMasker::getIsActive(accsCmnds, WINCH_OUT));
+    outputExpander.digitalWrite(cfg.winchInPin, BitMasker::getIsActive(accsCmnds, WINCH_IN));
+    outputExpander.digitalWrite(cfg.lWingUpPin, BitMasker::getIsActive(accsCmnds, L_WING_UP));
+    outputExpander.digitalWrite(cfg.lWingDownPin, BitMasker::getIsActive(accsCmnds, L_WING_DOWN));
+    outputExpander.digitalWrite(cfg.rWingUpPin, BitMasker::getIsActive(accsCmnds, R_WING_UP));
+    outputExpander.digitalWrite(cfg.rWingDownPin, BitMasker::getIsActive(accsCmnds, R_WING_DOWN));
 
     D2PRINTLN("Leaving writeHardware");
 }
@@ -493,7 +492,7 @@ void WirelessReceiver::updateMotorDiagnostics()
 void WirelessReceiver::systemPowerOff()
 {
     D1PRINTLN("Shutting OFF power now");
-    accsCmnds.set(TUG_SYSTEM_PWR, LOW);
+    BitMasker::setBit(accsCmnds, TUG_SYSTEM_PWR, LOW);
     outputExpander.digitalWrite(cfg.systemPwrPin, LOW);
     digitalWrite(cfg.externalStatusLedPin, LOW);
 }
@@ -501,7 +500,7 @@ void WirelessReceiver::systemPowerOff()
 void WirelessReceiver::systemPowerOn()
 {
     D1PRINTLN("Turning ON power now");
-    accsCmnds.set(TUG_SYSTEM_PWR, HIGH);
+    BitMasker::setBit(accsCmnds, TUG_SYSTEM_PWR, HIGH);
     outputExpander.digitalWrite(cfg.systemPwrPin, HIGH);
     digitalWrite(cfg.externalStatusLedPin, HIGH);
 }
