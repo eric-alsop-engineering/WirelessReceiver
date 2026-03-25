@@ -37,9 +37,9 @@ WirelessReceiver::WirelessReceiver(
     this->eStopButton = eStopButton;
     this->cfg = config;
 
-    // Detect optional capabilities via dynamic_cast
-    this->driveModes = dynamic_cast<IDriveModeController*>(&motor);
-    this->diagnostics = dynamic_cast<IDiagnosticSource*>(&motor);
+    // Detect optional capabilities (no RTTI on Arduino, so use virtual query)
+    this->driveModes = motor.asDriveModeController();
+    this->diagnostics = motor.asDiagnosticSource();
 
     systemReady = false;
     throttle = NEUTRAL;

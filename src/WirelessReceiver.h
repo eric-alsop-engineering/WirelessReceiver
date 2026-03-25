@@ -34,6 +34,7 @@
 #include <PushButton.h>
 #include <IMotorController.h>
 #include <BitMasker.h>
+#include <AccessoriesEnum.h>
 
 #define IDLE_TIMER_DURATION            1800000  // 30 minutes — STANDBY before deep sleep
 #define LOST_TIMER_DURATION            120000   // 2 minutes — LOST before deep sleep
