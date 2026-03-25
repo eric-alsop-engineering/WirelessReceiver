@@ -35,6 +35,7 @@
 #include <IMotorController.h>
 #include <BitMasker.h>
 #include <AccessoriesEnum.h>
+#include <Servo.h>
 
 #define IDLE_TIMER_DURATION            1800000  // 30 minutes — STANDBY before deep sleep
 #define LOST_TIMER_DURATION            120000   // 2 minutes — LOST before deep sleep
@@ -49,6 +50,9 @@ struct WirelessReceiverConfig
     uint8_t boardPwrOffPin;
     uint8_t externalStatusLedPin;
     uint8_t tugBatPin;             // ADC pin for tug battery voltage divider (e.g. 15/A1)
+    uint8_t lazySusanPwmPin;       // PWM pin for lazy susan servo/solenoid
+    uint8_t lazySusanAngleClose;   // Servo angle when ROTATE_UNLOCK is inactive (locked)
+    uint8_t lazySusanAngleOpen;    // Servo angle when ROTATE_UNLOCK is active (unlocked)
 
     // I2C expander addresses and bus
     uint8_t outputExpanderAddr;
@@ -125,6 +129,7 @@ private:
     IMotorController *motor;
     IDriveModeController *driveModes;    // nullptr if motor doesn't support it
     IDiagnosticSource *diagnostics;      // nullptr if motor doesn't support it
+    Servo lazySusanServo;
 
     void setOutputs();
     void handleComm();

@@ -91,6 +91,8 @@ void WirelessReceiver::setup()
 
     pinMode(cfg.tugBatPin, INPUT);
     motor->init();
+    lazySusanServo.attach(cfg.lazySusanPwmPin);
+    lazySusanServo.write(cfg.lazySusanAngleClose);
     writeHardware();
     comm.setup();
     systemPowerOn();
@@ -402,6 +404,12 @@ void WirelessReceiver::writeHardware()
     outputExpander.digitalWrite(cfg.lWingDownPin, BitMasker::getIsActive(accsCmnds, L_WING_DOWN));
     outputExpander.digitalWrite(cfg.rWingUpPin, BitMasker::getIsActive(accsCmnds, R_WING_UP));
     outputExpander.digitalWrite(cfg.rWingDownPin, BitMasker::getIsActive(accsCmnds, R_WING_DOWN));
+
+    // Lazy susan servo/solenoid PWM — toggles angle based on rotate state
+    if (BitMasker::getIsActive(accsCmnds, ROTATE_UNLOCK))
+        lazySusanServo.write(cfg.lazySusanAngleOpen);
+    else
+        lazySusanServo.write(cfg.lazySusanAngleClose);
 
     D2PRINTLN("Leaving writeHardware");
 }
