@@ -48,6 +48,7 @@ struct WirelessReceiverConfig
     // Board-level pins
     uint8_t boardPwrOffPin;
     uint8_t externalStatusLedPin;
+    uint8_t tugBatPin;             // ADC pin for tug battery voltage divider (e.g. 15/A1)
 
     // I2C expander addresses and bus
     uint8_t outputExpanderAddr;
@@ -138,6 +139,8 @@ private:
     void setDirectionalIndicators();
     void boardPowerOff();
     void updateMotorDiagnostics();
+    void readTugBattery();
+    unsigned long lastBatReadTime;
 };
 
 #endif // WirelessReceiver_H

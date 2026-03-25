@@ -45,7 +45,8 @@ WirelessReceiver::WirelessReceiver(
     throttle = NEUTRAL;
     steering = STRAIGHT;
     torque = 0xACED;       // TODO: not actually measured yet
-    tugBatLvl = 0xBAFF;   // TODO: not actually measured yet
+    tugBatLvl = 0;
+    lastBatReadTime = 0;
     accsCmnds = 0;
     accsStatus = 0;
     sysState = BOOT;
@@ -88,6 +89,7 @@ void WirelessReceiver::setup()
     pinMode(cfg.externalStatusLedPin, OUTPUT);
     digitalWrite(cfg.externalStatusLedPin, LOW);
 
+    pinMode(cfg.tugBatPin, INPUT);
     motor->init();
     writeHardware();
     comm.setup();
@@ -95,8 +97,19 @@ void WirelessReceiver::setup()
     D1PRINTLN("WirelessReceiver setup complete");
 }
 
+void WirelessReceiver::readTugBattery()
+{
+    if (millis() - lastBatReadTime >= 5000)
+    {
+        lastBatReadTime = millis();
+        tugBatLvl = analogRead(cfg.tugBatPin);
+        D2PRINTVAR(tugBatLvl);
+    }
+}
+
 void WirelessReceiver::update()
 {
+    readTugBattery();
     handleComm();
     handleStateChanges();
     updateMotorDiagnostics();
