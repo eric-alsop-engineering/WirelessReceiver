@@ -105,7 +105,10 @@ void WirelessReceiver::readTugBattery()
     {
         lastBatReadTime = millis();
         tugBatLvl = analogRead(cfg.tugBatPin);
-        D2PRINTVAR(tugBatLvl);
+        D1PRINT("Tug battery ADC (pin ");
+        D1PRINT(cfg.tugBatPin);
+        D1PRINT("): ");
+        D1PRINTLN(tugBatLvl);
     }
 }
 
@@ -407,9 +410,15 @@ void WirelessReceiver::writeHardware()
 
     // Lazy susan servo/solenoid PWM — toggles angle based on rotate state
     if (BitMasker::getIsActive(accsCmnds, ROTATE_UNLOCK))
+    {
         lazySusanServo.write(cfg.lazySusanAngleOpen);
+        D1PERIODICPRINTLN(1000, "Lazy susan servo -> OPEN");
+    }
     else
+    {
         lazySusanServo.write(cfg.lazySusanAngleClose);
+        D1PERIODICPRINTLN(1000, "Lazy susan servo -> CLOSE");
+    }
 
     D2PRINTLN("Leaving writeHardware");
 }
