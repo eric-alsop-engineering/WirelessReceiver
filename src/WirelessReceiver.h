@@ -40,6 +40,7 @@
 #define IDLE_TIMER_DURATION            1800000  // 30 minutes — STANDBY before deep sleep
 #define LOST_TIMER_DURATION            120000   // 2 minutes — LOST before deep sleep
 #define PWR_OFF_CONFIRMED_TIMER_DURATION 10000  // 10 seconds
+#define ESTOP_MIN_POWER_OFF_MS         2000     // Min time system power stays off during ESTOP (for motor controller reset)
 
 // ─── Hardware Configuration ─────────────────────────────────────────────────
 // Passed by the project .ino so the library never includes ProjectDefines.h.
@@ -114,10 +115,6 @@ public:
     uint16_t motorErrorCode;
     uint16_t motorStatusFlags;
 
-    // Optional callback for hardware-specific ESTOP recovery (e.g., Curtis 1229 reset).
-    // Set by the project .ino if needed. Called once when ESTOP is cleared.
-    void (*onEStopRecovery)() = nullptr;
-
     void setup();
     void update();
 
@@ -150,6 +147,7 @@ private:
     void updateMotorDiagnostics();
     void readTugBattery();
     unsigned long lastBatReadTime;
+    unsigned long eStopEnteredTime;
 };
 
 #endif // WirelessReceiver_H

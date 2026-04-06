@@ -453,6 +453,7 @@ void WirelessReceiver::handleStateChanges()
         if (ESTOP != sysState)
         {
             D1PRINTLN("Entering ESTOP");
+            eStopEnteredTime = millis();
         }
         sysState = ESTOP;
         return;
@@ -463,17 +464,21 @@ void WirelessReceiver::handleStateChanges()
         // We're in ESTOP but neither the local button nor the controller is
         // in ESTOP anymore — recover. Controller e-stop release is the
         // acknowledgment that clears the system.
+        // System power (pin #3) has been off the entire time we were in ESTOP.
+        // If we've been in ESTOP for at least 2 seconds, motor controllers
+        // have had enough time to fully reset (required for Curtis 1229).
+        unsigned long timeInEStop = millis() - eStopEnteredTime;
+        if (timeInEStop < ESTOP_MIN_POWER_OFF_MS)
+        {
+            D1PRINT("ESTOP clear pending — waiting for motor controller reset: ");
+            D1PRINTLN(ESTOP_MIN_POWER_OFF_MS - timeInEStop);
+            return;
+        }
         D1PRINTLN("ESTOP cleared — recovering");
         sysState = NORMAL;
         systemPowerOn();
         motor->releaseStop();
         pwrOffTimer.stop();
-        // Curtis 1229 controllers need a hardware reset — handled by
-        // onEStopRecovery() callback if provided.
-        if (onEStopRecovery)
-        {
-            onEStopRecovery();
-        }
         // Fall through to normal state checks below
     }
 
