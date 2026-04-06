@@ -449,9 +449,32 @@ void WirelessReceiver::handleStateChanges()
 
     if (eStopButton.isPressed() || ESTOP == ctrlrState)
     {
-        D1PRINTLN("E-Stop button pressed!");
+        // Local e-stop button or controller reporting ESTOP — enter/stay in ESTOP
+        if (ESTOP != sysState)
+        {
+            D1PRINTLN("Entering ESTOP");
+        }
         sysState = ESTOP;
         return;
+    }
+
+    if (ESTOP == sysState)
+    {
+        // We're in ESTOP but neither the local button nor the controller is
+        // in ESTOP anymore — recover. Controller e-stop release is the
+        // acknowledgment that clears the system.
+        D1PRINTLN("ESTOP cleared — recovering");
+        sysState = NORMAL;
+        systemPowerOn();
+        motor->releaseStop();
+        pwrOffTimer.stop();
+        // Curtis 1229 controllers need a hardware reset — handled by
+        // onEStopRecovery() callback if provided.
+        if (onEStopRecovery)
+        {
+            onEStopRecovery();
+        }
+        // Fall through to normal state checks below
     }
 
     if (COMM_NORMAL != comm.getStatusCode())
@@ -481,11 +504,8 @@ void WirelessReceiver::handleStateChanges()
         }
         break;
     case ESTOP:
-        if (ESTOP != sysState)
-        {
-            D1PRINTLN("Ctrlr is ESTOP. Setting sysState to ESTOP");
-            sysState = ESTOP;
-        }
+        // Handled above before the switch — controller ESTOP is caught
+        // in the eStopButton.isPressed() || ESTOP == ctrlrState check.
         break;
     case NORMAL:
         if (COMM_NORMAL == comm.getStatusCode() && NORMAL != sysState)

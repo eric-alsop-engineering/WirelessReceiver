@@ -114,6 +114,10 @@ public:
     uint16_t motorErrorCode;
     uint16_t motorStatusFlags;
 
+    // Optional callback for hardware-specific ESTOP recovery (e.g., Curtis 1229 reset).
+    // Set by the project .ino if needed. Called once when ESTOP is cleared.
+    void (*onEStopRecovery)() = nullptr;
+
     void setup();
     void update();
 
