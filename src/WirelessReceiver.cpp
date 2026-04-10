@@ -164,6 +164,11 @@ void WirelessReceiver::update()
         {
             pwrOffTimer.stop();
         }
+        if (motor->isEStopped() || motor->isSafetyStopped())
+        {
+            D1PRINTLN("Releasing motor stop on entry to NORMAL");
+            motor->releaseStop();
+        }
         break;
 
     case COMM_ERR:
