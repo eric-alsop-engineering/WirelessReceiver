@@ -148,6 +148,9 @@ private:
     void readTugBattery();
     unsigned long lastBatReadTime;
     unsigned long eStopEnteredTime;
+
+    // Previous accsCmnds value used to log only output transitions in writeHardware().
+    uint16_t prevAccsCmndsLogged;
 };
 
 #endif // WirelessReceiver_H

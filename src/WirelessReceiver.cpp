@@ -55,6 +55,7 @@ WirelessReceiver::WirelessReceiver(
     motorStatusFlags = 0;
     pwrOffTimer = Timer(IDLE_TIMER_DURATION, false);
     pwrOffConfirmedTimer = Timer(PWR_OFF_CONFIRMED_TIMER_DURATION, false);
+    prevAccsCmndsLogged = 0;
 }
 
 void WirelessReceiver::setup()
@@ -395,6 +396,34 @@ void WirelessReceiver::setDirectionalIndicators()
 void WirelessReceiver::writeHardware()
 {
     D2PRINTLN("Entering writeHardware");
+
+#ifdef SERIAL_DEBUG_LEVEL_1_ENABLED
+    {
+        uint16_t changed = accsCmnds ^ prevAccsCmndsLogged;
+        if (changed)
+        {
+            // Names indexed by accsBits_e. Matches AccessoriesEnum.h bit order.
+            static const char *const kAccsNames[16] = {
+                "TUG_SYSTEM_PWR",   "HEADLIGHTS",       "AIR_COMPRESSOR", "ROTATE_UNLOCK",
+                "EZ_LOAD_UNLOCK",   "UNDER_GLOW",       "FORWARD_LIGHT",  "BACKWARD_LIGHT",
+                "LEFT_TURN_LIGHT",  "RIGHT_TURN_LIGHT", "WINCH_OUT",      "WINCH_IN",
+                "L_WING_UP",        "L_WING_DOWN",      "R_WING_UP",      "R_WING_DOWN"
+            };
+            for (uint8_t i = 0; i < 16; ++i)
+            {
+                if (changed & (uint16_t)(1u << i))
+                {
+                    bool nowOn = (accsCmnds & (uint16_t)(1u << i)) != 0;
+                    D1PRINT("Accessory ");
+                    D1PRINT(kAccsNames[i]);
+                    D1PRINT(" -> ");
+                    D1PRINTLN(nowOn ? "ON" : "OFF");
+                }
+            }
+            prevAccsCmndsLogged = accsCmnds;
+        }
+    }
+#endif
 
     outputExpander.digitalWrite(cfg.systemPwrPin, BitMasker::getIsActive(accsCmnds, TUG_SYSTEM_PWR));
     outputExpander.digitalWrite(cfg.headlightsPin, BitMasker::getIsActive(accsCmnds, HEADLIGHTS));
