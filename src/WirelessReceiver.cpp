@@ -91,6 +91,8 @@ void WirelessReceiver::setup()
     digitalWrite(cfg.externalStatusLedPin, LOW);
 
     pinMode(cfg.tugBatPin, INPUT);
+    pinMode(cfg.rotationLockInputPin, INPUT_PULLUP);
+    pinMode(cfg.cradleLockInputPin, INPUT_PULLUP);
     motor->init();
     lazySusanServo.attach(cfg.lazySusanPwmPin);
     lazySusanServo.write(cfg.lazySusanAngleClose);
@@ -292,8 +294,11 @@ void WirelessReceiver::readHardware()
     BitMasker::setBit(accsStatus, TUG_SYSTEM_PWR, inputExpander.digitalRead(cfg.systemPwrPin));
     BitMasker::setBit(accsStatus, HEADLIGHTS, inputExpander.digitalRead(cfg.headlightsPin));
     BitMasker::setBit(accsStatus, AIR_COMPRESSOR, inputExpander.digitalRead(cfg.airCompressorPin));
-    BitMasker::setBit(accsStatus, ROTATE_UNLOCK, inputExpander.digitalRead(cfg.rotateRelayPin));
-    BitMasker::setBit(accsStatus, EZ_LOAD_UNLOCK, inputExpander.digitalRead(cfg.ezLoadRelayPin));
+    // Microswitch feedback (Teensy GPIO, not I/O expander).
+    // rotationLockInputPin: LOW = rotation unlocked → report ROTATE_UNLOCK bit HIGH.
+    // cradleLockInputPin:   HIGH = cradle unlocked → report EZ_LOAD_UNLOCK bit HIGH.
+    BitMasker::setBit(accsStatus, ROTATE_UNLOCK, digitalRead(cfg.rotationLockInputPin) == LOW);
+    BitMasker::setBit(accsStatus, EZ_LOAD_UNLOCK, digitalRead(cfg.cradleLockInputPin) == HIGH);
     BitMasker::setBit(accsStatus, UNDER_GLOW, inputExpander.digitalRead(cfg.underGlowPin));
     BitMasker::setBit(accsStatus, FORWARD_LIGHT, inputExpander.digitalRead(cfg.dirIndFwdLedPin));
     BitMasker::setBit(accsStatus, BACKWARD_LIGHT, inputExpander.digitalRead(cfg.dirIndRvrsLedPin));
