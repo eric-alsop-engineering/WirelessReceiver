@@ -449,7 +449,8 @@ void WirelessReceiver::writeHardware()
     outputExpander.digitalWrite(cfg.dirIndFwdLedPin,   BitMasker::getIsActive(accsCmnds, FORWARD_LIGHT));
     outputExpander.digitalWrite(cfg.dirIndRvrsLedPin,  BitMasker::getIsActive(accsCmnds, BACKWARD_LIGHT));
     outputExpander.digitalWrite(cfg.dirIndLeftLedPin,  BitMasker::getIsActive(accsCmnds, LEFT_TURN_LIGHT));
-    outputExpander.digitalWrite(cfg.dirIndRightLedPin, BitMasker::getIsActive(accsCmnds, RIGHT_TURN_LIGHT));
+    // (cfg.dirIndRightLedPin / pin 24 is NOT driven from RIGHT_TURN_LIGHT anymore -- repurposed to the
+    //  lazy-susan unlock solenoid, driven to match pin 6 in the rotation-lock block below.)
     // NOTE: winch in/out are on HB half-bridge (push-pull) pins, not DGD0216 low-side channels.
     // Driven active-HIGH here for consistency; confirm winch motor wiring + fail-safe with Nathan.
     outputExpander.digitalWrite(cfg.winchOutPin,       BitMasker::getIsActive(accsCmnds, WINCH_OUT));
@@ -463,6 +464,9 @@ void WirelessReceiver::writeHardware()
     bool rotateUnlock = BitMasker::getIsActive(accsCmnds, ROTATE_UNLOCK);
     outputExpander.digitalWrite(cfg.rotateBridgeAPin, rotateUnlock ? LOW : HIGH);
     outputExpander.digitalWrite(cfg.rotateBridgeBPin, rotateUnlock ? HIGH : LOW);
+    // Pin 24 (BDEX_16) drives the 16" lazy-susan unlock 24V solenoid directly (low-side, since the
+    // H-bridge pin can't), matching the rotation-lock bridge-A pin (pin 6) so they track together.
+    outputExpander.digitalWrite(cfg.dirIndRightLedPin, rotateUnlock ? LOW : HIGH);
     // Helipad wings (L/R) reuse the lock H-bridge pins on Helipad builds; not driven on Romeo.
 
     // Lazy susan servo/solenoid PWM — toggles angle based on rotate state
