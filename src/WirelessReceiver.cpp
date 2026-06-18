@@ -291,6 +291,11 @@ void WirelessReceiver::readHardware()
 {
     D2PRINTLN("Entering readHardware");
 
+    // TODO (R04D, §C input rework): this output-state readback assumes U6 mirrors the U5 output
+    // pins. Control stays active-HIGH at the expander, but U6 reads separate INPUT_DxPy sense lines
+    // (different lib pins than U5), and those shared connector pins sit at ~12V when off / ground
+    // when active. Re-derive the U6 INPUT_DxPy<->connector mapping from the schematic before
+    // trusting this feedback. Microswitch feedback below (Teensy 38/39) is unaffected and valid.
     BitMasker::setBit(accsStatus, TUG_SYSTEM_PWR, inputExpander.digitalRead(cfg.systemPwrPin));
     BitMasker::setBit(accsStatus, HEADLIGHTS, inputExpander.digitalRead(cfg.headlightsPin));
     BitMasker::setBit(accsStatus, AIR_COMPRESSOR, inputExpander.digitalRead(cfg.airCompressorPin));
@@ -430,22 +435,35 @@ void WirelessReceiver::writeHardware()
     }
 #endif
 
-    outputExpander.digitalWrite(cfg.systemPwrPin, BitMasker::getIsActive(accsCmnds, TUG_SYSTEM_PWR));
-    outputExpander.digitalWrite(cfg.headlightsPin, BitMasker::getIsActive(accsCmnds, HEADLIGHTS));
-    outputExpander.digitalWrite(cfg.airCompressorPin, BitMasker::getIsActive(accsCmnds, AIR_COMPRESSOR));
-    outputExpander.digitalWrite(cfg.rotateRelayPin, BitMasker::getIsActive(accsCmnds, ROTATE_UNLOCK));
-    outputExpander.digitalWrite(cfg.ezLoadRelayPin, BitMasker::getIsActive(accsCmnds, EZ_LOAD_UNLOCK));
-    outputExpander.digitalWrite(cfg.underGlowPin, BitMasker::getIsActive(accsCmnds, UNDER_GLOW));
-    outputExpander.digitalWrite(cfg.dirIndFwdLedPin, BitMasker::getIsActive(accsCmnds, FORWARD_LIGHT));
-    outputExpander.digitalWrite(cfg.dirIndRvrsLedPin, BitMasker::getIsActive(accsCmnds, BACKWARD_LIGHT));
-    outputExpander.digitalWrite(cfg.dirIndLeftLedPin, BitMasker::getIsActive(accsCmnds, LEFT_TURN_LIGHT));
+    // R04D: low-side ground-switching outputs are ACTIVE-HIGH from the Teensy (expander HIGH ->
+    // DGD0216 -> N-FET ON -> switches the device's ground -> device ON). When the Teensy is
+    // unpowered or the expander floats, gate/input pulldowns hold the FET OFF -> device OFF
+    // (fail-safe, per Eric's design requirement). The connector pin reads ~12V when off and is
+    // pulled to ground when active -- that is the "default HIGH, LOW when active" behavior Nathan
+    // describes at the OUTPUT pin; the control sense here at the expander stays active-HIGH.
+    // KSI Out replaces the old system-power relay.
+    outputExpander.digitalWrite(cfg.systemPwrPin,      BitMasker::getIsActive(accsCmnds, TUG_SYSTEM_PWR)); // KSI Out
+    outputExpander.digitalWrite(cfg.headlightsPin,     BitMasker::getIsActive(accsCmnds, HEADLIGHTS));
+    outputExpander.digitalWrite(cfg.airCompressorPin,  BitMasker::getIsActive(accsCmnds, AIR_COMPRESSOR));
+    outputExpander.digitalWrite(cfg.underGlowPin,      BitMasker::getIsActive(accsCmnds, UNDER_GLOW));
+    outputExpander.digitalWrite(cfg.dirIndFwdLedPin,   BitMasker::getIsActive(accsCmnds, FORWARD_LIGHT));
+    outputExpander.digitalWrite(cfg.dirIndRvrsLedPin,  BitMasker::getIsActive(accsCmnds, BACKWARD_LIGHT));
+    outputExpander.digitalWrite(cfg.dirIndLeftLedPin,  BitMasker::getIsActive(accsCmnds, LEFT_TURN_LIGHT));
     outputExpander.digitalWrite(cfg.dirIndRightLedPin, BitMasker::getIsActive(accsCmnds, RIGHT_TURN_LIGHT));
-    outputExpander.digitalWrite(cfg.winchOutPin, BitMasker::getIsActive(accsCmnds, WINCH_OUT));
-    outputExpander.digitalWrite(cfg.winchInPin, BitMasker::getIsActive(accsCmnds, WINCH_IN));
-    outputExpander.digitalWrite(cfg.lWingUpPin, BitMasker::getIsActive(accsCmnds, L_WING_UP));
-    outputExpander.digitalWrite(cfg.lWingDownPin, BitMasker::getIsActive(accsCmnds, L_WING_DOWN));
-    outputExpander.digitalWrite(cfg.rWingUpPin, BitMasker::getIsActive(accsCmnds, R_WING_UP));
-    outputExpander.digitalWrite(cfg.rWingDownPin, BitMasker::getIsActive(accsCmnds, R_WING_DOWN));
+    // NOTE: winch in/out are on HB half-bridge (push-pull) pins, not DGD0216 low-side channels.
+    // Driven active-HIGH here for consistency; confirm winch motor wiring + fail-safe with Nathan.
+    outputExpander.digitalWrite(cfg.winchOutPin,       BitMasker::getIsActive(accsCmnds, WINCH_OUT));
+    outputExpander.digitalWrite(cfg.winchInPin,        BitMasker::getIsActive(accsCmnds, WINCH_IN));
+
+    // R04D: EZ-load and rotation locks are H-bridges driven as an opposed pair.
+    // Rest/locked = bridgeA HIGH, bridgeB LOW. Active/unlock ("Load" selected) = bridgeA LOW, bridgeB HIGH.
+    bool ezLoadUnlock = BitMasker::getIsActive(accsCmnds, EZ_LOAD_UNLOCK);
+    outputExpander.digitalWrite(cfg.ezLoadBridgeAPin, ezLoadUnlock ? LOW : HIGH);
+    outputExpander.digitalWrite(cfg.ezLoadBridgeBPin, ezLoadUnlock ? HIGH : LOW);
+    bool rotateUnlock = BitMasker::getIsActive(accsCmnds, ROTATE_UNLOCK);
+    outputExpander.digitalWrite(cfg.rotateBridgeAPin, rotateUnlock ? LOW : HIGH);
+    outputExpander.digitalWrite(cfg.rotateBridgeBPin, rotateUnlock ? HIGH : LOW);
+    // Helipad wings (L/R) reuse the lock H-bridge pins on Helipad builds; not driven on Romeo.
 
     // Lazy susan servo/solenoid PWM — toggles angle based on rotate state
     if (BitMasker::getIsActive(accsCmnds, ROTATE_UNLOCK))

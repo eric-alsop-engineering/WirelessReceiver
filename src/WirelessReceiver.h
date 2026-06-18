@@ -62,19 +62,27 @@ struct WirelessReceiverConfig
     uint8_t inputExpanderAddr;
     TwoWire *ioExpanderWire;          // e.g. &Wire2
 
-    // Output-expander pin map (directly drives relays / LEDs on the tug)
-    uint8_t systemPwrPin;
+    // Output-expander pin map (MCP23X17 lib pins). R04D: these are LOW-SIDE / switched-ground
+    // outputs -> ACTIVE-LOW. writeHardware() holds them HIGH at rest and drives LOW when active.
+    uint8_t systemPwrPin;       // KSI Out (motor-controller enable; replaces the old system-power relay)
     uint8_t headlightsPin;
     uint8_t airCompressorPin;
-    uint8_t rotateRelayPin;
-    uint8_t ezLoadRelayPin;
     uint8_t underGlowPin;
     uint8_t dirIndFwdLedPin;
     uint8_t dirIndRvrsLedPin;
     uint8_t dirIndLeftLedPin;
     uint8_t dirIndRightLedPin;
-    uint8_t winchOutPin;
+    uint8_t winchOutPin;        // switched-ground, independent (NOT an opposed pair)
     uint8_t winchInPin;
+
+    // R04D: EZ-load and rotation locks are H-bridges driven as an opposed pair.
+    // Rest/locked = bridgeA HIGH, bridgeB LOW. Active/unlock = bridgeA LOW, bridgeB HIGH.
+    uint8_t ezLoadBridgeAPin;
+    uint8_t ezLoadBridgeBPin;
+    uint8_t rotateBridgeAPin;
+    uint8_t rotateBridgeBPin;
+
+    // Helipad wings reuse the lock H-bridge pins on Helipad builds; unused on Romeo.
     uint8_t lWingUpPin;
     uint8_t lWingDownPin;
     uint8_t rWingUpPin;
