@@ -87,6 +87,18 @@ struct WirelessReceiverConfig
     uint8_t lWingDownPin;
     uint8_t rWingUpPin;
     uint8_t rWingDownPin;
+
+    // R04D: U6 (input expander) sense pins for output-state feedback. Each BDEX output's connector
+    // pin is divided + buffered to a U6 channel (different lib pin than the U5 output). The pin
+    // reads ~HIGH when the output is OFF and LOW when it is ACTIVE (switched to ground).
+    uint8_t ksiInPin;
+    uint8_t headlightsInPin;
+    uint8_t airCompressorInPin;
+    uint8_t dirIndFwdInPin;
+    uint8_t dirIndRvrsInPin;
+    uint8_t dirIndLeftInPin;
+    uint8_t dirIndRightInPin;
+    uint8_t underGlowInPin;
 };
 
 class WirelessReceiver

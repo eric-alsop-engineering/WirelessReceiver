@@ -291,30 +291,30 @@ void WirelessReceiver::readHardware()
 {
     D2PRINTLN("Entering readHardware");
 
-    // TODO (R04D, §C input rework): this output-state readback assumes U6 mirrors the U5 output
-    // pins. Control stays active-HIGH at the expander, but U6 reads separate INPUT_DxPy sense lines
-    // (different lib pins than U5), and those shared connector pins sit at ~12V when off / ground
-    // when active. Re-derive the U6 INPUT_DxPy<->connector mapping from the schematic before
-    // trusting this feedback. Microswitch feedback below (Teensy 38/39) is unaffected and valid.
-    BitMasker::setBit(accsStatus, TUG_SYSTEM_PWR, inputExpander.digitalRead(cfg.systemPwrPin));
-    BitMasker::setBit(accsStatus, HEADLIGHTS, inputExpander.digitalRead(cfg.headlightsPin));
-    BitMasker::setBit(accsStatus, AIR_COMPRESSOR, inputExpander.digitalRead(cfg.airCompressorPin));
-    // Microswitch feedback (Teensy GPIO, not I/O expander).
-    // rotationLockInputPin: LOW = rotation unlocked → report ROTATE_UNLOCK bit HIGH.
-    // cradleLockInputPin:   HIGH = cradle unlocked → report EZ_LOAD_UNLOCK bit HIGH.
-    BitMasker::setBit(accsStatus, ROTATE_UNLOCK, digitalRead(cfg.rotationLockInputPin) == LOW);
+    // R04D output-state feedback via U6 (input expander) sense lines. Each BDEX output's connector
+    // pin is divided + buffered to a U6 channel: ~HIGH when the output is OFF (pin near +12V), LOW
+    // when ACTIVE (pin switched to ground). So active = (read == LOW). [Bench-verify polarity.]
+    BitMasker::setBit(accsStatus, TUG_SYSTEM_PWR,   inputExpander.digitalRead(cfg.ksiInPin)           == LOW); // KSI Out
+    BitMasker::setBit(accsStatus, HEADLIGHTS,       inputExpander.digitalRead(cfg.headlightsInPin)    == LOW);
+    BitMasker::setBit(accsStatus, AIR_COMPRESSOR,   inputExpander.digitalRead(cfg.airCompressorInPin) == LOW);
+    BitMasker::setBit(accsStatus, FORWARD_LIGHT,    inputExpander.digitalRead(cfg.dirIndFwdInPin)     == LOW);
+    BitMasker::setBit(accsStatus, BACKWARD_LIGHT,   inputExpander.digitalRead(cfg.dirIndRvrsInPin)    == LOW);
+    BitMasker::setBit(accsStatus, LEFT_TURN_LIGHT,  inputExpander.digitalRead(cfg.dirIndLeftInPin)    == LOW);
+    BitMasker::setBit(accsStatus, RIGHT_TURN_LIGHT, inputExpander.digitalRead(cfg.dirIndRightInPin)   == LOW);
+    BitMasker::setBit(accsStatus, UNDER_GLOW,       inputExpander.digitalRead(cfg.underGlowInPin)     == LOW);
+
+    // Lock state from the microswitches (Teensy GPIO, not the expander):
+    // rotationLockInputPin LOW = rotation unlocked; cradleLockInputPin HIGH = cradle unlocked.
+    BitMasker::setBit(accsStatus, ROTATE_UNLOCK,  digitalRead(cfg.rotationLockInputPin) == LOW);
     BitMasker::setBit(accsStatus, EZ_LOAD_UNLOCK, digitalRead(cfg.cradleLockInputPin) == HIGH);
-    BitMasker::setBit(accsStatus, UNDER_GLOW, inputExpander.digitalRead(cfg.underGlowPin));
-    BitMasker::setBit(accsStatus, FORWARD_LIGHT, inputExpander.digitalRead(cfg.dirIndFwdLedPin));
-    BitMasker::setBit(accsStatus, BACKWARD_LIGHT, inputExpander.digitalRead(cfg.dirIndRvrsLedPin));
-    BitMasker::setBit(accsStatus, LEFT_TURN_LIGHT, inputExpander.digitalRead(cfg.dirIndLeftLedPin));
-    BitMasker::setBit(accsStatus, RIGHT_TURN_LIGHT, inputExpander.digitalRead(cfg.dirIndRightLedPin));
-    BitMasker::setBit(accsStatus, WINCH_OUT, inputExpander.digitalRead(cfg.winchOutPin));
-    BitMasker::setBit(accsStatus, WINCH_IN, inputExpander.digitalRead(cfg.winchInPin));
-    BitMasker::setBit(accsStatus, L_WING_UP, inputExpander.digitalRead(cfg.lWingUpPin));
-    BitMasker::setBit(accsStatus, L_WING_DOWN, inputExpander.digitalRead(cfg.lWingDownPin));
-    BitMasker::setBit(accsStatus, R_WING_UP, inputExpander.digitalRead(cfg.rWingUpPin));
-    BitMasker::setBit(accsStatus, R_WING_DOWN, inputExpander.digitalRead(cfg.rWingDownPin));
+
+    // Winch + wings are on HB half-bridges (no U6 sense line) -> echo the commanded state.
+    BitMasker::setBit(accsStatus, WINCH_OUT,   BitMasker::getIsActive(accsCmnds, WINCH_OUT));
+    BitMasker::setBit(accsStatus, WINCH_IN,    BitMasker::getIsActive(accsCmnds, WINCH_IN));
+    BitMasker::setBit(accsStatus, L_WING_UP,   BitMasker::getIsActive(accsCmnds, L_WING_UP));
+    BitMasker::setBit(accsStatus, L_WING_DOWN, BitMasker::getIsActive(accsCmnds, L_WING_DOWN));
+    BitMasker::setBit(accsStatus, R_WING_UP,   BitMasker::getIsActive(accsCmnds, R_WING_UP));
+    BitMasker::setBit(accsStatus, R_WING_DOWN, BitMasker::getIsActive(accsCmnds, R_WING_DOWN));
 
     D2PRINTLN("Leaving readHardware");
 }
