@@ -469,16 +469,19 @@ void WirelessReceiver::writeHardware()
     outputExpander.digitalWrite(cfg.dirIndRightLedPin, rotateUnlock ? LOW : HIGH);
     // Helipad wings (L/R) reuse the lock H-bridge pins on Helipad builds; not driven on Romeo.
 
-    // Lazy susan servo/solenoid PWM — toggles angle based on rotate state
-    if (BitMasker::getIsActive(accsCmnds, ROTATE_UNLOCK))
+    // Lazy-susan LOAD/UNLOAD servo PWM. Per Nathan (R04D): the servo is the load/unload
+    // mechanism on small lazy susans, and it must trigger TOGETHER with the EZ-load
+    // H-bridge actuators (large lazy susans) — same EZ_LOAD_UNLOCK command drives both,
+    // so one "Load" control works for both unit sizes. (Was previously on ROTATE_UNLOCK.)
+    if (ezLoadUnlock)
     {
         lazySusanServo.write(cfg.lazySusanAngleOpen);
-        D1PERIODICPRINTLN(1000, "Lazy susan servo -> OPEN");
+        D1PERIODICPRINTLN(1000, "Lazy susan load/unload servo -> OPEN");
     }
     else
     {
         lazySusanServo.write(cfg.lazySusanAngleClose);
-        D1PERIODICPRINTLN(1000, "Lazy susan servo -> CLOSE");
+        D1PERIODICPRINTLN(1000, "Lazy susan load/unload servo -> CLOSE");
     }
 
     D2PRINTLN("Leaving writeHardware");
