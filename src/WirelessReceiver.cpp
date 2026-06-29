@@ -28,6 +28,7 @@ WirelessReceiver::WirelessReceiver(
     Adafruit_MCP23X17 &outputExpander,
     Adafruit_MCP23X17 &inputExpander,
     PushButton &eStopButton,
+    PushButton &pairButton,
     const WirelessReceiverConfig &config)
 {
     this->comm = comm;
@@ -35,6 +36,7 @@ WirelessReceiver::WirelessReceiver(
     this->outputExpander = outputExpander;
     this->inputExpander = inputExpander;
     this->eStopButton = eStopButton;
+    this->pairButton = pairButton;
     this->cfg = config;
 
     // Detect optional capabilities (no RTTI on Arduino, so use virtual query)
@@ -56,6 +58,14 @@ WirelessReceiver::WirelessReceiver(
     pwrOffTimer = Timer(IDLE_TIMER_DURATION, false);
     pwrOffConfirmedTimer = Timer(PWR_OFF_CONFIRMED_TIMER_DURATION, false);
     prevAccsCmndsLogged = 0;
+
+    pairWindowTimer = Timer(PAIR_WINDOW_DURATION_MS, false);
+    pairingWindowOpen = false;
+    pairButtonWasPressed = false;
+    pairLedMode = PAIR_LED_NORMAL;
+    pairLedState = false;
+    pairLedToggleTime = 0;
+    pairResultHoldUntil = 0;
 }
 
 void WirelessReceiver::setup()
@@ -85,6 +95,11 @@ void WirelessReceiver::setup()
 
     accsCmnds = 0;
     eStopButton.init();
+    if (cfg.pairButtonPin != 0xFF)
+    {
+        pairButton.init();
+    }
+    comm.setPairingEnabled(false); // tug won't accept pairing until the operator opens the window
     pinMode(cfg.boardPwrOffPin, OUTPUT);
     digitalWrite(cfg.boardPwrOffPin, LOW);
     pinMode(cfg.externalStatusLedPin, OUTPUT);
@@ -119,6 +134,7 @@ void WirelessReceiver::update()
 {
     readTugBattery();
     handleComm();
+    handlePairing();
     handleStateChanges();
     updateMotorDiagnostics();
 
@@ -284,6 +300,103 @@ void WirelessReceiver::handleComm()
         extractReceivedData();
         setOutputs();
         comm.rxdDataReadyToUse = false;
+    }
+}
+
+// OTA pairing (PDB side). The pair button opens a single-accept window during which the tug will
+// honor a controller's pairing handshake (gated in WirelessComm::setStateGlobal). The existing
+// PAIR_RESPONSE/PAIR_END exchange does the actual address swap; here we just manage the window,
+// the single-accept behavior, and the status-LED feedback. See OTA_Radio_Pairing_Design.md.
+void WirelessReceiver::handlePairing()
+{
+    if (cfg.pairButtonPin == 0xFF)
+    {
+        return; // no pairing button fitted on this build
+    }
+
+    // Rising-edge detect: arm (or re-arm) the window on a fresh press. A second press restarts the
+    // 60 s window — stop() first because Timer::start() is a no-op while already running.
+    bool pressedNow = pairButton.isPressed();
+    if (pressedNow && !pairButtonWasPressed)
+    {
+        pairWindowTimer.stop();
+        pairWindowTimer.start(PAIR_WINDOW_DURATION_MS);
+        pairingWindowOpen = true;
+        comm.setPairingEnabled(true);
+        comm.setStatusCode(RADIO_PAIRING); // clear any stale PAIRING_SUCCESS from a prior pairing
+        pairLedMode = PAIR_LED_WINDOW;
+        D1PRINTLN("Pairing window OPEN (60 s) — waiting for controller");
+    }
+    pairButtonWasPressed = pressedNow;
+
+    if (pairingWindowOpen)
+    {
+        if (PAIRING_SUCCESS == comm.getStatusCode())
+        {
+            // Single-accept: first successful pairing closes the window.
+            pairingWindowOpen = false;
+            comm.setPairingEnabled(false);
+            pairWindowTimer.stop();
+            pairLedMode = PAIR_LED_SUCCESS;
+            pairResultHoldUntil = millis() + PAIR_LED_RESULT_HOLD_MS;
+            D1PRINTLN("Pairing SUCCESS — window closed");
+        }
+        else if (pairWindowTimer.isFinished())
+        {
+            pairingWindowOpen = false;
+            comm.setPairingEnabled(false);
+            pairLedMode = PAIR_LED_TIMEOUT;
+            pairResultHoldUntil = millis() + PAIR_LED_RESULT_HOLD_MS;
+            D1PRINTLN("Pairing window TIMED OUT — no controller paired");
+        }
+    }
+
+    updatePairingLed();
+}
+
+// Non-blocking status-LED driver for pairing. Owns externalStatusLedPin only while a window is open
+// or a result indication is showing; otherwise leaves it to the normal power-state control.
+void WirelessReceiver::updatePairingLed()
+{
+    unsigned long now = millis();
+    switch (pairLedMode)
+    {
+    case PAIR_LED_WINDOW: // fast blink ~5 Hz while waiting
+        if (now - pairLedToggleTime >= PAIR_LED_FAST_BLINK_MS)
+        {
+            pairLedToggleTime = now;
+            pairLedState = !pairLedState;
+            digitalWrite(cfg.externalStatusLedPin, pairLedState);
+        }
+        break;
+
+    case PAIR_LED_SUCCESS: // solid ON, then hand back to normal
+        digitalWrite(cfg.externalStatusLedPin, HIGH);
+        if ((long)(now - pairResultHoldUntil) >= 0)
+        {
+            pairLedMode = PAIR_LED_NORMAL;
+            digitalWrite(cfg.externalStatusLedPin, HIGH); // restore powered (LED on) state
+        }
+        break;
+
+    case PAIR_LED_TIMEOUT: // slow blink, then hand back to normal
+        if (now - pairLedToggleTime >= PAIR_LED_SLOW_BLINK_MS)
+        {
+            pairLedToggleTime = now;
+            pairLedState = !pairLedState;
+            digitalWrite(cfg.externalStatusLedPin, pairLedState);
+        }
+        if ((long)(now - pairResultHoldUntil) >= 0)
+        {
+            pairLedMode = PAIR_LED_NORMAL;
+            digitalWrite(cfg.externalStatusLedPin, HIGH); // restore powered (LED on) state
+        }
+        break;
+
+    case PAIR_LED_NORMAL:
+    default:
+        // Not pairing: leave the LED under normal power-state control (systemPowerOn/Off).
+        break;
     }
 }
 

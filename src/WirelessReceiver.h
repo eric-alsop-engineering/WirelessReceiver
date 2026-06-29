@@ -42,6 +42,12 @@
 #define PWR_OFF_CONFIRMED_TIMER_DURATION 10000  // 10 seconds
 #define ESTOP_MIN_POWER_OFF_MS         2000     // Min time system power stays off during ESTOP (for motor controller reset)
 
+// OTA pairing (see OTA_Radio_Pairing_Design.md)
+#define PAIR_WINDOW_DURATION_MS        60000    // Pairing accept window after the pair button is pressed
+#define PAIR_LED_FAST_BLINK_MS         100      // ~5 Hz blink while the window is open
+#define PAIR_LED_SLOW_BLINK_MS         400      // slow blink for the timeout indication
+#define PAIR_LED_RESULT_HOLD_MS        2000     // how long the success/timeout indication holds before normal
+
 // ─── Hardware Configuration ─────────────────────────────────────────────────
 // Passed by the project .ino so the library never includes ProjectDefines.h.
 
@@ -50,6 +56,7 @@ struct WirelessReceiverConfig
     // Board-level pins
     uint8_t boardPwrOffPin;
     uint8_t externalStatusLedPin;
+    uint8_t pairButtonPin;         // OTA pairing button (SETUP_BTN, active-low). 0xFF = not fitted.
     uint8_t tugBatPin;             // ADC pin for tug battery voltage divider (e.g. 15/A1)
     uint8_t lazySusanPwmPin;       // PWM pin for lazy susan servo/solenoid
     uint8_t lazySusanAngleClose;   // Servo angle when ROTATE_UNLOCK is inactive (locked)
@@ -112,6 +119,7 @@ public:
         Adafruit_MCP23X17 &outputExpander,
         Adafruit_MCP23X17 &inputExpander,
         PushButton &eStopButton,
+        PushButton &pairButton,
         const WirelessReceiverConfig &config);
 
     WirelessComm comm;
@@ -146,6 +154,19 @@ private:
     Adafruit_MCP23X17 inputExpander;
     uint8_t maxPinNum;
     PushButton eStopButton;
+
+    // ── OTA pairing ──
+    PushButton pairButton;
+    Timer pairWindowTimer;
+    bool pairingWindowOpen;
+    bool pairButtonWasPressed;             // for rising-edge press detection
+    enum PairLedMode { PAIR_LED_NORMAL, PAIR_LED_WINDOW, PAIR_LED_SUCCESS, PAIR_LED_TIMEOUT };
+    PairLedMode pairLedMode;
+    bool pairLedState;                     // current LED level while blinking
+    unsigned long pairLedToggleTime;       // last blink toggle (millis)
+    unsigned long pairResultHoldUntil;     // when the success/timeout indication ends (millis)
+    void handlePairing();
+    void updatePairingLed();
 
     // Motor controller — accessed through the abstract interface.
     // Optional capability pointers are set at construction time.
