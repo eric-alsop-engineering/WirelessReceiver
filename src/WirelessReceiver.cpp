@@ -325,6 +325,13 @@ void WirelessReceiver::handlePairing()
         comm.setPairingEnabled(true);
         comm.setStatusCode(RADIO_PAIRING); // clear any stale PAIRING_SUCCESS from a prior pairing
         pairLedMode = PAIR_LED_WINDOW;
+        // Defense-in-depth: force motion to neutral the instant the pairing window opens, so a
+        // non-centered stick can't keep the tug moving during the handshake. safetyStop() latches
+        // until NORMAL is re-entered after pairing. (The COMM_ERR path also enforces neutral every
+        // cycle while pairing, since status != COMM_NORMAL — this makes the intent explicit here.)
+        throttle = NEUTRAL;
+        steering = STRAIGHT;
+        motor->safetyStop();
         D1PRINTLN("Pairing window OPEN (60 s) — waiting for controller");
     }
     pairButtonWasPressed = pressedNow;
