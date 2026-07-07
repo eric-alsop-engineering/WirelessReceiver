@@ -566,8 +566,11 @@ void WirelessReceiver::writeHardware()
     //  lazy-susan unlock solenoid, driven to match pin 6 in the rotation-lock block below.)
     // NOTE: winch in/out are on HB half-bridge (push-pull) pins, not DGD0216 low-side channels.
     // Driven active-HIGH here for consistency; confirm winch motor wiring + fail-safe with Nathan.
-    outputExpander.digitalWrite(cfg.winchOutPin,       BitMasker::getIsActive(accsCmnds, WINCH_OUT));
-    outputExpander.digitalWrite(cfg.winchInPin,        BitMasker::getIsActive(accsCmnds, WINCH_IN));
+    // Command->pin mapping is swapped: on hardware the motor spins opposite the commanded
+    // direction (WINCH_IN drove the winch out and vice versa), so WINCH_IN drives winchOutPin
+    // and WINCH_OUT drives winchInPin to match physical winch direction.
+    outputExpander.digitalWrite(cfg.winchOutPin,       BitMasker::getIsActive(accsCmnds, WINCH_IN));
+    outputExpander.digitalWrite(cfg.winchInPin,        BitMasker::getIsActive(accsCmnds, WINCH_OUT));
 
     // R04D: EZ-load and rotation locks are H-bridges driven as an opposed pair.
     // Rest/locked = bridgeA HIGH, bridgeB LOW. Active/unlock ("Load" selected) = bridgeA LOW, bridgeB HIGH.
