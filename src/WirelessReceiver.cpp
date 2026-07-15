@@ -574,13 +574,16 @@ void WirelessReceiver::writeHardware()
     outputExpander.digitalWrite(cfg.dirIndLeftLedPin,  BitMasker::getIsActive(accsCmnds, LEFT_TURN_LIGHT));
     // (cfg.dirIndRightLedPin / pin 24 is NOT driven from RIGHT_TURN_LIGHT anymore -- repurposed to the
     //  lazy-susan unlock solenoid, driven to match pin 6 in the rotation-lock block below.)
-    // NOTE: winch in/out are on HB half-bridge (push-pull) pins, not DGD0216 low-side channels.
-    // Driven active-HIGH here for consistency; confirm winch motor wiring + fail-safe with Nathan.
-    // Command->pin mapping is swapped: on hardware the motor spins opposite the commanded
-    // direction (WINCH_IN drove the winch out and vice versa), so WINCH_IN drives winchOutPin
-    // and WINCH_OUT drives winchInPin to match physical winch direction.
-    outputExpander.digitalWrite(cfg.winchOutPin,       BitMasker::getIsActive(accsCmnds, WINCH_IN));
-    outputExpander.digitalWrite(cfg.winchInPin,        BitMasker::getIsActive(accsCmnds, WINCH_OUT));
+    // NOTE: winch in/out are on an HB H-bridge (push-pull) pin pair, not DGD0216 low-side
+    // channels. On an H-bridge, direction is set by which side is driven, so the command->pin
+    // mapping determines winch travel direction. Straightforward mapping: WINCH_IN -> winchInPin,
+    // WINCH_OUT -> winchOutPin. (An earlier build swapped these to compensate for a winch that
+    // spun backwards; the R04D harness rewire corrected the wiring, so the swap is removed and
+    // the mapping is honest again. If a given tug's winch runs backwards, fix it at the motor
+    // leads / harness — do NOT re-introduce a firmware swap, since this mapping is shared by all
+    // wireless receivers and must match consistent wiring across tugs.)
+    outputExpander.digitalWrite(cfg.winchOutPin,       BitMasker::getIsActive(accsCmnds, WINCH_OUT));
+    outputExpander.digitalWrite(cfg.winchInPin,        BitMasker::getIsActive(accsCmnds, WINCH_IN));
 
     // R04D: EZ-load and rotation locks are H-bridges driven as an opposed pair.
     // Rest/locked = bridgeA HIGH, bridgeB LOW. Active/unlock ("Load" selected) = bridgeA LOW, bridgeB HIGH.
