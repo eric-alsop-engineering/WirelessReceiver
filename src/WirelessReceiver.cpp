@@ -73,10 +73,21 @@ void WirelessReceiver::setup()
     Serial.begin(115200);
     D1PRINTLN("Starting Best Tugs Receiver");
 
+    accsCmnds = 0;
+
     if (outputExpander.begin_I2C(cfg.outputExpanderAddr, cfg.ioExpanderWire))
     {
         D1PRINTLN("Output io expander init: PASS\n");
         ioExpanderSetAllPinModes(outputExpander, OUTPUT);
+
+        // Turn KSI on as early as possible — the instant the output expander (which owns the KSI
+        // pin) is up. This lets the Curtis controllers begin powering up and booting while the
+        // rest of setup() runs (input expander, motor CAN/NMT init, XBee), instead of waiting for
+        // the systemPowerOn() at the end. systemPowerOn() still runs later and re-asserts KSI +
+        // the status LED. KSI (systemPwrPin) is active-high at the expander.
+        BitMasker::setBit(accsCmnds, TUG_SYSTEM_PWR, HIGH);
+        outputExpander.digitalWrite(cfg.systemPwrPin, HIGH);
+        D1PRINTLN("KSI ON (early) — Curtis controllers powering up");
     }
     else
     {
@@ -93,7 +104,6 @@ void WirelessReceiver::setup()
         ERRORPRINTLN("Input io expander init: FAIL\n");
     }
 
-    accsCmnds = 0;
     eStopButton.init();
     if (cfg.pairButtonPin != 0xFF)
     {
@@ -574,16 +584,16 @@ void WirelessReceiver::writeHardware()
     outputExpander.digitalWrite(cfg.dirIndLeftLedPin,  BitMasker::getIsActive(accsCmnds, LEFT_TURN_LIGHT));
     // (cfg.dirIndRightLedPin / pin 24 is NOT driven from RIGHT_TURN_LIGHT anymore -- repurposed to the
     //  lazy-susan unlock solenoid, driven to match pin 6 in the rotation-lock block below.)
-    // NOTE: winch in/out are on an HB H-bridge (push-pull) pin pair, not DGD0216 low-side
-    // channels. On an H-bridge, direction is set by which side is driven, so the command->pin
-    // mapping determines winch travel direction. Straightforward mapping: WINCH_IN -> winchInPin,
-    // WINCH_OUT -> winchOutPin. (An earlier build swapped these to compensate for a winch that
-    // spun backwards; the R04D harness rewire corrected the wiring, so the swap is removed and
-    // the mapping is honest again. If a given tug's winch runs backwards, fix it at the motor
-    // leads / harness — do NOT re-introduce a firmware swap, since this mapping is shared by all
-    // wireless receivers and must match consistent wiring across tugs.)
-    outputExpander.digitalWrite(cfg.winchOutPin,       BitMasker::getIsActive(accsCmnds, WINCH_OUT));
-    outputExpander.digitalWrite(cfg.winchInPin,        BitMasker::getIsActive(accsCmnds, WINCH_IN));
+    // Winch in/out are an ACTIVE-LOW (switched-ground) HB H-bridge pin pair: the pin idles HIGH
+    // (device OFF) and is pulled LOW to activate. So write the INVERSE of the commanded state —
+    // getIsActive() == false -> HIGH (off, the default), true -> LOW (on when the button is held).
+    // (Verified on the LED test fixture: without the invert both winch outputs sat ON by default.)
+    // Straightforward command->pin mapping: WINCH_IN -> winchInPin, WINCH_OUT -> winchOutPin.
+    // Physical travel direction is set by the H-bridge wiring — if a tug's winch runs backwards,
+    // fix it at the motor leads / harness, NOT with a firmware swap (this mapping is shared by all
+    // wireless receivers and must match consistent wiring across tugs).
+    outputExpander.digitalWrite(cfg.winchOutPin,       !BitMasker::getIsActive(accsCmnds, WINCH_OUT));
+    outputExpander.digitalWrite(cfg.winchInPin,        !BitMasker::getIsActive(accsCmnds, WINCH_IN));
 
     // R04D: EZ-load and rotation locks are H-bridges driven as an opposed pair.
     // Rest/locked = bridgeA HIGH, bridgeB LOW. Active/unlock ("Load" selected) = bridgeA LOW, bridgeB HIGH.
