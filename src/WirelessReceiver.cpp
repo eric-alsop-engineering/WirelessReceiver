@@ -217,8 +217,11 @@ void WirelessReceiver::update()
         }
         throttle = NEUTRAL;
         steering = STRAIGHT;
+        // Powered e-stop: command NEUTRAL and let the motor controller ramp to a stop at
+        // its e-stop deceleration rate. Do NOT cut KSI here — leaving the controllers
+        // powered gives a controlled powered stop instead of a coast. The tug's physical
+        // e-stop button has its own independent hardware motor cutoff for firmware faults.
         motor->eStop();
-        systemPowerOff();
         if (!pwrOffTimer.isRunning())
         {
             pwrOffTimer.start(IDLE_TIMER_DURATION);
@@ -651,16 +654,9 @@ void WirelessReceiver::handleStateChanges()
         // We're in ESTOP but neither the local button nor the controller is
         // in ESTOP anymore — recover. Controller e-stop release is the
         // acknowledgment that clears the system.
-        // System power (pin #3) has been off the entire time we were in ESTOP.
-        // If we've been in ESTOP for at least 2 seconds, motor controllers
-        // have had enough time to fully reset (required for Curtis 1229).
-        unsigned long timeInEStop = millis() - eStopEnteredTime;
-        if (timeInEStop < ESTOP_MIN_POWER_OFF_MS)
-        {
-            D1PRINT("ESTOP clear pending — waiting for motor controller reset: ");
-            D1PRINTLN(ESTOP_MIN_POWER_OFF_MS - timeInEStop);
-            return;
-        }
+        // KSI is left ON during ESTOP now (powered stop via the motor controller's
+        // e-stop deceleration), so the controllers were never power-cycled and there
+        // is no reset delay to wait out — recover immediately.
         D1PRINTLN("ESTOP cleared — recovering");
         sysState = NORMAL;
         systemPowerOn();
