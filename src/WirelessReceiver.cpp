@@ -142,6 +142,10 @@ void WirelessReceiver::readTugBattery()
 
 void WirelessReceiver::update()
 {
+    // Diagnostic heartbeat on the comm CAN bus so an isolated PDB is scope-visible
+    // (rate-limited to 1 Hz inside CANComm).
+    comm.canComm.txHeartbeat((uint8_t)sysState, eStopButton.isPressed() ? 0x01 : 0x00);
+
     readTugBattery();
     handleComm();
     handlePairing();
