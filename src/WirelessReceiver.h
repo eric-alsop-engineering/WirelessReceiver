@@ -38,6 +38,10 @@
 #include <Servo.h>
 
 #define IDLE_TIMER_DURATION            1800000  // 30 minutes — STANDBY before deep sleep
+// AIEX inputs run through the PDB's on-board 10k/2.37k divider (12 V-level): a 12 V signal
+// lands ~2.3 V at the pin, right at the digital VIH threshold, so lock-switch reads are
+// analog compared to this (310 counts ~= 1.0 V at the pin ~= 5.2 V at the connector).
+#define AIEX_DIGITAL_ON_THRESHOLD 310
 #define LOST_TIMER_DURATION            120000   // 2 minutes — LOST before deep sleep
 #define PWR_OFF_CONFIRMED_TIMER_DURATION 10000  // 10 seconds
 #define ESTOP_MIN_POWER_OFF_MS         2000     // Min time system power stays off during ESTOP (for motor controller reset)

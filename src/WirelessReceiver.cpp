@@ -116,8 +116,11 @@ void WirelessReceiver::setup()
     digitalWrite(cfg.externalStatusLedPin, LOW);
 
     pinMode(cfg.tugBatPin, INPUT);
-    pinMode(cfg.rotationLockInputPin, INPUT_PULLUP);
-    pinMode(cfg.cradleLockInputPin, INPUT_PULLUP);
+    // Plain INPUT: the PDB's on-board 10k/2.37k dividers define the level on the AIEX inputs
+    // (an internal pull-up can't win against the 2.37k bottom leg), and the lock-switch reads
+    // are analog-threshold (see readHardware).
+    pinMode(cfg.rotationLockInputPin, INPUT);
+    pinMode(cfg.cradleLockInputPin, INPUT);
     motor->init();
     lazySusanServo.attach(cfg.lazySusanPwmPin);
     lazySusanServo.write(cfg.lazySusanAngleClose);
@@ -440,10 +443,13 @@ void WirelessReceiver::readHardware()
     BitMasker::setBit(accsStatus, RIGHT_TURN_LIGHT, inputExpander.digitalRead(cfg.dirIndRightInPin)   == LOW);
     BitMasker::setBit(accsStatus, UNDER_GLOW,       inputExpander.digitalRead(cfg.underGlowInPin)     == LOW);
 
-    // Lock state from the microswitches (Teensy GPIO, not the expander):
-    // rotationLockInputPin LOW = rotation unlocked; cradleLockInputPin HIGH = cradle unlocked.
-    BitMasker::setBit(accsStatus, ROTATE_UNLOCK,  digitalRead(cfg.rotationLockInputPin) == LOW);
-    BitMasker::setBit(accsStatus, EZ_LOAD_UNLOCK, digitalRead(cfg.cradleLockInputPin) == HIGH);
+    // Lock state from the microswitches (Teensy analog pins, not the expander):
+    // rotation line low = rotation unlocked; cradle line high = cradle unlocked.
+    // Analog-threshold reads: the AIEX inputs run through the PDB's on-board 10k/2.37k
+    // divider (12 V-level), which lands a 12 V switch signal ~2.3 V at the pin — right at the
+    // digital VIH threshold — so digitalRead was marginal. 310 counts ~= 1.0 V at the pin.
+    BitMasker::setBit(accsStatus, ROTATE_UNLOCK,  analogRead(cfg.rotationLockInputPin) <= AIEX_DIGITAL_ON_THRESHOLD);
+    BitMasker::setBit(accsStatus, EZ_LOAD_UNLOCK, analogRead(cfg.cradleLockInputPin) > AIEX_DIGITAL_ON_THRESHOLD);
 
     // Winch + wings are on HB half-bridges (no U6 sense line) -> echo the commanded state.
     BitMasker::setBit(accsStatus, WINCH_OUT,   BitMasker::getIsActive(accsCmnds, WINCH_OUT));
