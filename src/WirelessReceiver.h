@@ -67,6 +67,7 @@ struct WirelessReceiverConfig
     uint8_t lazySusanAngleOpen;    // Servo angle when ROTATE_UNLOCK is active (unlocked)
     uint8_t rotationLockInputPin;  // Microswitch: LOW = rotation unlocked
     uint8_t cradleLockInputPin;    // Microswitch: LOW = cradle locked, HIGH = cradle unlocked
+    uint8_t breakerSensePin;       // Main breaker monitor (0 = not fitted): low = breaker OK, high = blown
 
     // I2C expander addresses and bus
     uint8_t outputExpanderAddr;

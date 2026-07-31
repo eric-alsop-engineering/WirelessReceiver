@@ -121,6 +121,10 @@ void WirelessReceiver::setup()
     // are analog-threshold (see readHardware).
     pinMode(cfg.rotationLockInputPin, INPUT);
     pinMode(cfg.cradleLockInputPin, INPUT);
+    if (cfg.breakerSensePin != 0)
+    {
+        pinMode(cfg.breakerSensePin, INPUT);
+    }
     motor->init();
     lazySusanServo.attach(cfg.lazySusanPwmPin);
     lazySusanServo.write(cfg.lazySusanAngleClose);
@@ -474,6 +478,33 @@ void WirelessReceiver::loadPacketToTx()
 
     comm.activePacket.setMotorErrorCode(motorErrorCode);
     comm.activePacket.setMotorStatusFlags(motorStatusFlags);
+
+    // Main breaker monitor: the breaker interrupts ground for everything except the PDB; the
+    // sense line sits on the protected ground (low) and gets pulled to +12V by a harness
+    // resistor when the breaker opens (the AIEX divider makes an internal pull-up useless).
+    // Qualified 250 ms so a transient can't flash the "Check Breaker" message.
+    uint16_t flags = 0;
+    if (cfg.breakerSensePin != 0)
+    {
+        static unsigned long breakerHighSinceMs = 0;
+        if (analogRead(cfg.breakerSensePin) > AIEX_DIGITAL_ON_THRESHOLD)
+        {
+            if (0 == breakerHighSinceMs)
+            {
+                breakerHighSinceMs = millis();
+                if (0 == breakerHighSinceMs) breakerHighSinceMs = 1;
+            }
+        }
+        else
+        {
+            breakerHighSinceMs = 0;
+        }
+        if ((0 != breakerHighSinceMs) && ((millis() - breakerHighSinceMs) >= 250))
+        {
+            flags |= TUG_FLAG_BREAKER_BLOWN;
+        }
+    }
+    comm.activePacket.setTugFlags(flags);
 }
 
 void WirelessReceiver::extractReceivedData()
