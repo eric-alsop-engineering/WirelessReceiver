@@ -304,6 +304,23 @@ void WirelessReceiver::update()
         ERRORPRINTLN("WirelessReceiver sysState is in an unknown state");
         break;
     }
+
+    // Drive the motor controller every loop, NOT only when a packet lands. update() is what
+    // actually transmits (the Curtis RPDO stream, the RoboteQ CANopen tick); it self-rate-limits
+    // internally, so calling it unconditionally just makes the stream time-driven instead of
+    // packet-driven.
+    //
+    // It used to live in setOutputs(), which only runs on a fresh XBee packet (handleComm) or in
+    // COMM_ERR — so any gap in controller packets stopped CAN transmission outright and the Curtis
+    // raised PDO Timeout. That is the common cause behind all three of Nathan's repros: switching
+    // the remote between the settings and accessories pages (EVE redraw stalls the handheld's TX),
+    // random dropouts while driving, and plugging/unplugging USB at the PDB. States that never call
+    // setOutputs at all (ESTOP, IDLE, BOOT) were guaranteed to time out.
+    //
+    // Throttle/steering still only change when a packet arrives or a state forces neutral; between
+    // packets this re-sends the last applied values, which is what the Curtis was holding anyway —
+    // and a genuine comm loss still ramps to neutral via COMM_ERR.
+    motor->update();
 }
 
 void WirelessReceiver::ioExpanderSetAllPinModes(Adafruit_MCP23X17 &expander, uint8_t mode)
@@ -537,7 +554,8 @@ void WirelessReceiver::setOutputs()
         motor->setSteering(STRAIGHT);
         motor->setThrottle(NEUTRAL);
     }
-    motor->update();
+    // motor->update() deliberately NOT called here — it runs once per loop at the end of
+    // update() so the CAN stream never stops when packets stop arriving. See the note there.
     setDirectionalIndicators();
     writeHardware();
 }
