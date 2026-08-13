@@ -204,9 +204,16 @@ void WirelessReceiver::update()
         {
             pwrOffTimer.stop();
         }
-        if (motor->isEStopped() || motor->isSafetyStopped())
+        // Release the E-STOP only. The safety stop is deliberately NOT cleared here: it releases
+        // itself inside the motor controller's setThrottle() once the stick is back within the
+        // ±300 deadband, which is the whole point of it — hold the tug stopped until the operator
+        // centres the stick. Clearing it here undid that on the very next loop, so a quick-reversal
+        // safety stop only ever lasted one iteration and the ramp to neutral never finished.
+        // (Both live implementations, RoboteQ and Curtis 1229, self-clear. Any new
+        // IMotorController must do the same or its safety stop will latch.)
+        if (motor->isEStopped())
         {
-            D1PRINTLN("Releasing motor stop on entry to NORMAL");
+            D1PRINTLN("Releasing motor e-stop on entry to NORMAL");
             motor->releaseStop();
         }
         break;
@@ -368,8 +375,9 @@ void WirelessReceiver::handlePairing()
         pairLedMode = PAIR_LED_WINDOW;
         // Defense-in-depth: force motion to neutral the instant the pairing window opens, so a
         // non-centered stick can't keep the tug moving during the handshake. safetyStop() latches
-        // until NORMAL is re-entered after pairing. (The COMM_ERR path also enforces neutral every
-        // cycle while pairing, since status != COMM_NORMAL — this makes the intent explicit here.)
+        // until the stick is back inside the deadband once pairing is done — the operator has to
+        // centre it before drive resumes. (The COMM_ERR path also enforces neutral every cycle
+        // while pairing, since status != COMM_NORMAL — this makes the intent explicit here.)
         throttle = NEUTRAL;
         steering = STRAIGHT;
         motor->safetyStop();
