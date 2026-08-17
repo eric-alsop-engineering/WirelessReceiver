@@ -512,7 +512,16 @@ void WirelessReceiver::loadPacketToTx()
     if (cfg.breakerSensePin != 0)
     {
         static unsigned long breakerHighSinceMs = 0;
-        if (analogRead(cfg.breakerSensePin) > AIEX_DIGITAL_ON_THRESHOLD)
+
+        // Raw counts every 5 s. This monitor shipped with NO logging at all, which is why three
+        // bench rounds on Romeo could not separate "the PDB never sees the breaker open" from
+        // "the PDB sees it but the handheld never shows it" — the serial capture simply had
+        // nothing about the breaker in it either way. Low counts = breaker OK (line grounded),
+        // above AIEX_DIGITAL_ON_THRESHOLD = open (harness pull-up to +12V winning).
+        const int breakerRaw = analogRead(cfg.breakerSensePin);
+        D1PERIODICPRINTVAR(5000, breakerRaw);
+
+        if (breakerRaw > AIEX_DIGITAL_ON_THRESHOLD)
         {
             if (0 == breakerHighSinceMs)
             {
@@ -527,6 +536,20 @@ void WirelessReceiver::loadPacketToTx()
         if ((0 != breakerHighSinceMs) && ((millis() - breakerHighSinceMs) >= 250))
         {
             flags |= TUG_FLAG_BREAKER_BLOWN;
+        }
+
+        // Edge-triggered so it is loud when it matters but silent otherwise (a per-loop print
+        // here would stall the loop, which is what was causing the Curtis PDO timeouts).
+        static bool prevBreakerBlown = false;
+        const bool breakerBlownNow = (0 != (flags & TUG_FLAG_BREAKER_BLOWN));
+        if (breakerBlownNow != prevBreakerBlown)
+        {
+            prevBreakerBlown = breakerBlownNow;
+            D1PRINT("Main breaker ");
+            D1PRINT(breakerBlownNow ? "OPEN" : "restored");
+            D1PRINT(" (raw ");
+            D1PRINT(breakerRaw);
+            D1PRINTLN(") — sending TUG_FLAG_BREAKER_BLOWN to the controller");
         }
     }
     comm.activePacket.setTugFlags(flags);
@@ -804,6 +827,21 @@ void WirelessReceiver::updateMotorDiagnostics()
     {
         motorErrorCode = 0;
         motorStatusFlags = 0;
+    }
+
+    // Edge-triggered: says what the PDB is actually putting in the packet. Without this the only
+    // way to tell "the motor controller never reported a fault" from "it reported one and the
+    // handheld did not show it" was to guess. Prints on any change, including back to zero.
+    static uint16_t prevErr = 0;
+    static uint16_t prevFlags = 0;
+    if (motorErrorCode != prevErr || motorStatusFlags != prevFlags)
+    {
+        prevErr = motorErrorCode;
+        prevFlags = motorStatusFlags;
+        D1PRINT("Motor diagnostics -> packet: errorCode 0x");
+        D1PRINT(motorErrorCode, HEX);
+        D1PRINT(", statusFlags 0x");
+        D1PRINTLN(motorStatusFlags, HEX);
     }
 }
 
