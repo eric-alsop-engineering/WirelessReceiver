@@ -55,6 +55,7 @@ WirelessReceiver::WirelessReceiver(
     ctrlrState = BOOT;
     motorErrorCode = 0;
     motorStatusFlags = 0;
+    eStopLatched = false;
     pwrOffTimer = Timer(IDLE_TIMER_DURATION, false);
     pwrOffConfirmedTimer = Timer(PWR_OFF_CONFIRMED_TIMER_DURATION, false);
     prevAccsCmndsLogged = 0;
@@ -509,6 +510,10 @@ void WirelessReceiver::loadPacketToTx()
     // resistor when the breaker opens (the AIEX divider makes an internal pull-up useless).
     // Qualified 250 ms so a transient can't flash the "Check Breaker" message.
     uint16_t flags = 0;
+    if (eStopLatched)
+    {
+        flags |= TUG_FLAG_ESTOP_LATCHED;
+    }
     if (cfg.breakerSensePin != 0)
     {
         static unsigned long breakerHighSinceMs = 0;
@@ -749,11 +754,28 @@ void WirelessReceiver::handleStateChanges()
             eStopEnteredTime = millis();
         }
         sysState = ESTOP;
+        // Held in ESTOP past the window -> latch until power cycle (see ESTOP_LATCH_AFTER_MS).
+        // The minute counts from ESTOP entry; a tug that boots into ESTOP gets a fresh minute
+        // because eStopEnteredTime is stamped on the post-boot entry.
+        if (!eStopLatched && (millis() - eStopEnteredTime >= ESTOP_LATCH_AFTER_MS))
+        {
+            eStopLatched = true;
+            D1PRINTLN("ESTOP held > 1 min — LATCHED until tug power cycle");
+        }
         return;
     }
 
     if (ESTOP == sysState)
     {
+        if (eStopLatched)
+        {
+            // Latched: the normal recovery below (controller acknowledged and released) is
+            // deliberately unreachable. Stay in ESTOP; only a tug power cycle clears this.
+            // The pwrOffTimer keeps running, so the 30-minute idle power-off still fires
+            // from a latched ESTOP — same behaviour Bravo already has.
+            D1PERIODICPRINTLN(400, "ESTOP latched — cycle tug power to clear");
+            return;
+        }
         // We're in ESTOP but neither the local button nor the controller is
         // in ESTOP anymore — recover. Controller e-stop release is the
         // acknowledgment that clears the system.

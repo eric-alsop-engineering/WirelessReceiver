@@ -45,6 +45,11 @@
 #define LOST_TIMER_DURATION            120000   // 2 minutes — LOST before deep sleep
 #define PWR_OFF_CONFIRMED_TIMER_DURATION 10000  // 10 seconds
 #define ESTOP_MIN_POWER_OFF_MS         2000     // Min time system power stays off during ESTOP (for motor controller reset)
+// After this long continuously in ESTOP, the tug latches: only a tug power cycle clears it.
+// Safety request (Nathan, 2026-08-18): a remote carried into another room could otherwise
+// clear an e-stop and start a tug nobody is looking at. Within the window, e-stop recovery
+// behaves exactly as before. RAM latch — a power cycle clears it by definition.
+#define ESTOP_LATCH_AFTER_MS           60000    // 1 minute
 
 // OTA pairing (see OTA_Radio_Pairing_Design.md)
 #define PAIR_WINDOW_DURATION_MS        60000    // Pairing accept window after the pair button is pressed
@@ -196,6 +201,7 @@ private:
     void readTugBattery();
     unsigned long lastBatReadTime;
     unsigned long eStopEnteredTime;
+    bool eStopLatched; // set when ESTOP has been held ESTOP_LATCH_AFTER_MS; never cleared except by reboot
 
     // Previous accsCmnds value used to log only output transitions in writeHardware().
     uint16_t prevAccsCmndsLogged;
