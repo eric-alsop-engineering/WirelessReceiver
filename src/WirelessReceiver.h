@@ -73,6 +73,12 @@ struct WirelessReceiverConfig
     uint8_t rotationLockInputPin;  // Microswitch: LOW = rotation unlocked
     uint8_t cradleLockInputPin;    // Microswitch: LOW = cradle locked, HIGH = cradle unlocked
     uint8_t breakerSensePin;       // Main breaker monitor (0 = not fitted): low = breaker OK, high = blown
+    // Papa/Helipad: the rotate + EZ-load lock H-bridge pins drive the WINGS instead. Changes
+    // writeHardware(): all four bridge pins idle at expander HIGH (connector LOW, motors off,
+    // per Nathan: conn 2/4/6/8 must default low) and are driven LOW only while a wing command
+    // is active. Rotate bridge = RIGHT wing (conn 6 up / 8 down), EZ-load bridge = LEFT wing.
+    // false (Romeo) keeps the opposed-pair lock behaviour.
+    bool wingOutputsOnLockBridges;
 
     // I2C expander addresses and bus
     uint8_t outputExpanderAddr;

@@ -79,6 +79,18 @@ void WirelessReceiver::setup()
     if (outputExpander.begin_I2C(cfg.outputExpanderAddr, cfg.ioExpanderWire))
     {
         D1PRINTLN("Output io expander init: PASS\n");
+        // Pre-load idle levels on the H-bridge pins BEFORE flipping IODIR to OUTPUT: the
+        // MCP23017's output latch resets to 0, so going straight to OUTPUT drives every HB pin
+        // LOW (= connector HIGH = motor ON) for the window until writeHardware() runs. Writing
+        // OLAT while the pins are still inputs makes the OUTPUT transition glitchless. Winch
+        // idles HIGH/HIGH; the lock bridges idle at their rest pair, or all-HIGH (motors off)
+        // when the bridges drive the Papa/Helipad wings.
+        outputExpander.digitalWrite(cfg.winchOutPin, HIGH);
+        outputExpander.digitalWrite(cfg.winchInPin, HIGH);
+        outputExpander.digitalWrite(cfg.ezLoadBridgeAPin, HIGH);
+        outputExpander.digitalWrite(cfg.ezLoadBridgeBPin, cfg.wingOutputsOnLockBridges ? HIGH : LOW);
+        outputExpander.digitalWrite(cfg.rotateBridgeAPin, HIGH);
+        outputExpander.digitalWrite(cfg.rotateBridgeBPin, cfg.wingOutputsOnLockBridges ? HIGH : LOW);
         ioExpanderSetAllPinModes(outputExpander, OUTPUT);
 
         // Turn KSI on as early as possible — the instant the output expander (which owns the KSI
@@ -690,18 +702,66 @@ void WirelessReceiver::writeHardware()
     outputExpander.digitalWrite(cfg.winchOutPin,       !BitMasker::getIsActive(accsCmnds, WINCH_OUT));
     outputExpander.digitalWrite(cfg.winchInPin,        !BitMasker::getIsActive(accsCmnds, WINCH_IN));
 
-    // R04D: EZ-load and rotation locks are H-bridges driven as an opposed pair.
-    // Rest/locked = bridgeA HIGH, bridgeB LOW. Active/unlock ("Load" selected) = bridgeA LOW, bridgeB HIGH.
     bool ezLoadUnlock = BitMasker::getIsActive(accsCmnds, EZ_LOAD_UNLOCK);
-    outputExpander.digitalWrite(cfg.ezLoadBridgeAPin, ezLoadUnlock ? LOW : HIGH);
-    outputExpander.digitalWrite(cfg.ezLoadBridgeBPin, ezLoadUnlock ? HIGH : LOW);
     bool rotateUnlock = BitMasker::getIsActive(accsCmnds, ROTATE_UNLOCK);
-    outputExpander.digitalWrite(cfg.rotateBridgeAPin, rotateUnlock ? LOW : HIGH);
-    outputExpander.digitalWrite(cfg.rotateBridgeBPin, rotateUnlock ? HIGH : LOW);
-    // Pin 24 (BDEX_16) drives the 16" lazy-susan unlock 24V solenoid directly (low-side, since the
-    // H-bridge pin can't), matching the rotation-lock bridge-A pin (pin 6) so they track together.
-    outputExpander.digitalWrite(cfg.dirIndRightLedPin, rotateUnlock ? LOW : HIGH);
-    // Helipad wings (L/R) reuse the lock H-bridge pins on Helipad builds; not driven on Romeo.
+    if (cfg.wingOutputsOnLockBridges)
+    {
+        // Papa/Helipad: the four lock H-bridge pins drive the WINGS. Idle = expander HIGH on all
+        // four (the HB stage inverts, so connector pins 2/4/6/8 read LOW = motors off, which is
+        // the required power-up default). A wing command pulls its one pin LOW (connector HIGH)
+        // only while the button is held. Rotate bridge = RIGHT wing (conn 6 up / 8 down);
+        // EZ-load bridge = LEFT wing (conn 2 up / 4 down). If a controller ever commands UP and
+        // DOWN together for the same wing, drive neither.
+        bool lUp   = BitMasker::getIsActive(accsCmnds, L_WING_UP);
+        bool lDown = BitMasker::getIsActive(accsCmnds, L_WING_DOWN);
+        bool rUp   = BitMasker::getIsActive(accsCmnds, R_WING_UP);
+        bool rDown = BitMasker::getIsActive(accsCmnds, R_WING_DOWN);
+        if (lUp && lDown)
+        {
+            ERRORPRINTLN("L wing UP+DOWN commanded together - driving neither");
+            lUp = false; lDown = false;
+        }
+        if (rUp && rDown)
+        {
+            ERRORPRINTLN("R wing UP+DOWN commanded together - driving neither");
+            rUp = false; rDown = false;
+        }
+        outputExpander.digitalWrite(cfg.ezLoadBridgeAPin, lUp   ? LOW : HIGH);
+        outputExpander.digitalWrite(cfg.ezLoadBridgeBPin, lDown ? LOW : HIGH);
+        outputExpander.digitalWrite(cfg.rotateBridgeAPin, rUp   ? LOW : HIGH);
+        outputExpander.digitalWrite(cfg.rotateBridgeBPin, rDown ? LOW : HIGH);
+
+        // Troubleshooting print: logical wing state + what the connector pins should read, on
+        // any change only (a per-loop print here would stall the loop, which is what trips the
+        // Curtis PDO timeouts).
+        static uint8_t prevWingState = 0xFF;
+        uint8_t wingState = (uint8_t)((lUp ? 1 : 0) | (lDown ? 2 : 0) | (rUp ? 4 : 0) | (rDown ? 8 : 0));
+        if (wingState != prevWingState)
+        {
+            prevWingState = wingState;
+            D1PRINT("Wings: L=");
+            D1PRINT(lUp ? "UP" : (lDown ? "DOWN" : "off"));
+            D1PRINT(" R=");
+            D1PRINT(rUp ? "UP" : (rDown ? "DOWN" : "off"));
+            D1PRINT("  conn pins [2,4,6,8] = ");
+            D1PRINT(lUp);   D1PRINT(",");
+            D1PRINT(lDown); D1PRINT(",");
+            D1PRINT(rUp);   D1PRINT(",");
+            D1PRINTLN(rDown);
+        }
+    }
+    else
+    {
+        // R04D Romeo: EZ-load and rotation locks are H-bridges driven as an opposed pair.
+        // Rest/locked = bridgeA HIGH, bridgeB LOW. Active/unlock (Load selected) = bridgeA LOW, bridgeB HIGH.
+        outputExpander.digitalWrite(cfg.ezLoadBridgeAPin, ezLoadUnlock ? LOW : HIGH);
+        outputExpander.digitalWrite(cfg.ezLoadBridgeBPin, ezLoadUnlock ? HIGH : LOW);
+        outputExpander.digitalWrite(cfg.rotateBridgeAPin, rotateUnlock ? LOW : HIGH);
+        outputExpander.digitalWrite(cfg.rotateBridgeBPin, rotateUnlock ? HIGH : LOW);
+        // Pin 24 (BDEX_16) drives the 16-inch lazy-susan unlock 24V solenoid directly (low-side,
+        // since the H-bridge pin cannot), matching rotation bridge A (pin 6) so they track together.
+        outputExpander.digitalWrite(cfg.dirIndRightLedPin, rotateUnlock ? LOW : HIGH);
+    }
 
     // Lazy-susan LOAD/UNLOAD servo PWM. Per Nathan (R04D): the servo is the load/unload
     // mechanism on small lazy susans, and it must trigger TOGETHER with the EZ-load
